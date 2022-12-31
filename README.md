@@ -1,9 +1,9 @@
-# gangoffour
+# GangOfFour
 
 
 # 1. Creational patterns
  # Prototype
-    SchoolStaff contains register of created classes (HeadMaster, SupervisorTeacher, Teacher), which are deep cloned when requested.
+   SchoolStaff contains register of created classes (HeadMaster, SupervisorTeacher, Teacher), which are deep cloned when requested.
 
 # 2. Structural patterns
  # Composite 
