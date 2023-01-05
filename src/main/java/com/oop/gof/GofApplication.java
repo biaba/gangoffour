@@ -15,6 +15,9 @@ public class GofApplication {
 
 
     public static void main(String[] args) throws CloneNotSupportedException {
+        GofApplication go = new GofApplication();
+        go.getClass();
+        System.out.println(go.getClass());
 
         SchoolStaffService schoolStaffService = new SchoolStaffService();
         // Prototype pattern - SchoolStaffRegister holds one instance per class of SchoolStaff child classes and can be requested when new instance
