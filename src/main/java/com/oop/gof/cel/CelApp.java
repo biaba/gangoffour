@@ -1,7 +1,7 @@
 package com.oop.gof.cel;
 
 import com.google.api.expr.v1alpha1.Decl;
-import com.google.protobuf.Descriptors;
+import com.google.protobuf.*;
 import org.projectnessie.cel.Env;
 import org.projectnessie.cel.EnvOption;
 import org.projectnessie.cel.Program;
@@ -11,14 +11,95 @@ import org.projectnessie.cel.common.types.ref.Val;
 import org.projectnessie.cel.tools.Script;
 import org.projectnessie.cel.tools.ScriptException;
 import org.projectnessie.cel.tools.ScriptHost;
+import org.slf4j.Logger;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.*;
+
+import static com.oop.gof.cel.Account.parseFrom;
+
 
 public class CelApp {
 
-    public static void main(String[] a) throws ScriptException {
+    public static void main(String[] a) throws ScriptException, IOException {
         simpleCel();
         simpleCel2("display_name == 'juris'");
+        simpleCel3("display_name == 'kristers'");
+
+        extendedFieldOption();
+    }
+
+    public static void extendedFieldOption() {
+        Account account = javaInstance();
+
+        ExtensionRegistry registry = ExtensionRegistry.newInstance();
+cd 
+        registry.add(com.oop.gof.cel.Account.level);
+        String valueOfExtension =
+                Account.getDescriptor()
+                        .findFieldByName("user_id")
+                        .getOptions()
+                .getExtension(com.oop.gof.cel.Account.level);
+        System.out.println("Extension of field user_id: "+ valueOfExtension);
+    }
+
+    public static void simpleCel3(String filter) throws IOException {
+        Env env = prepareEnv();
+
+        Program program = compileAndGetProgram(env, filter);
+
+// values from DB or other source
+        Map<String, Object> variables2 = new HashMap<>();
+        variables2.put("client_id", "123");
+        variables2.put("display_name", "anna");
+        variables2.put("phone_number", "321");
+        variables2.put("emails", Collections.emptyList());
+
+// evaluating user requested filter against existing value
+        Message accountValue = messageFromJavaInstance();
+        byte[] accountByteArray = accountValue.toByteArray();
+        InputStream targetStream = new ByteArrayInputStream(accountByteArray);
+        Account account = parseFrom(targetStream);
+        Map<String, Object> accountMap = new HashMap<>();
+        accountMap.put("display_name", accountValue.getField(Account.getDescriptor().findFieldByName("display_name")));
+        Val result = program.eval(accountMap).getVal();
+        System.out.println("Auto convert - java instance-> Message -> feeding in CEL. \n " +
+                "Result of CEL evaluation - does the entry exist?: " + result.booleanValue());
+        accountMap.put("display_name", account.getDisplayName());
+        result = program.eval(accountMap).getVal();
+
+        System.out.println("Auto convert - java instance-> Message -> feeding in CEL. \n " +
+                "Result of CEL evaluation - does the entry exist?: " + result.booleanValue());
+
+    }
+
+    public static Message messageFromJavaInstance() {
+        return Account.newBuilder()
+                .setPhoneNumber("887766")
+                .setDisplayName("messageAccount")
+                .setUserId("555")
+                .addEmails("anna@anna.lv").build();
+    }
+
+    public static Account javaInstance() {
+        return Account.newBuilder()
+                .setPhoneNumber("887766")
+                .setDisplayName("messageAccount")
+                .setUserId("555")
+                .addEmails("anna@anna.lv").build();
+    }
+
+    public static Program compileAndGetProgram(Env env, String filter) {
+        // compiling user requested filter against environment
+        Env.AstIssuesTuple astAndIssues = env.compile(filter);
+
+        if (astAndIssues.hasIssues()) {
+            throw new RuntimeException("CEL in wrong format: " + astAndIssues.getIssues());
+        }
+// getting program if compiled value without errors
+        return env.program(astAndIssues.getAst());
     }
 
     public static void simpleCel2(String filter) {
@@ -27,27 +108,14 @@ public class CelApp {
                 .setDisplayName("accountDisplayName")
                 .setUserId("0001").build();
 
-        Descriptors.Descriptor accountDescriptor = Account.getDescriptor();
-        List<Decl> declsList = new ArrayList<>();
 
-        declsList.add(Decls.newVar(accountDescriptor.findFieldByName("user_id").getName(), Decls.Dyn));
-        declsList.add(Decls.newVar(accountDescriptor.findFieldByName("display_name").getName(), Decls.String));
-        declsList.add(Decls.newVar(accountDescriptor.findFieldByName("phone_number").getName(), Decls.String));
-        declsList.add(Decls.newVar(accountDescriptor.findFieldByName("emails").getName(), Decls.newListType(Decls.String)));
-
-        ProtoTypeRegistry celTypeRegistry = ProtoTypeRegistry.newRegistry();
-        celTypeRegistry.registerMessage(Account.getDefaultInstance());
-        Env env = Env.newEnv(
-                EnvOption.container(accountDescriptor.getFullName()),
-                EnvOption.customTypeProvider(celTypeRegistry),
-                EnvOption.customTypeAdapter(celTypeRegistry),
-                EnvOption.declarations(declsList));
+        Env env = prepareEnv();
 
 // compiling user requested filter against environment
         Env.AstIssuesTuple astAndIssues = env.compile(filter);
 
-        if(astAndIssues.hasIssues()) {
-            throw new RuntimeException("CEL in wrong format: "+ astAndIssues.getIssues());
+        if (astAndIssues.hasIssues()) {
+            throw new RuntimeException("CEL in wrong format: " + astAndIssues.getIssues());
         }
 // getting program if compiled value without errors
         Program program = env.program(astAndIssues.getAst());
@@ -63,7 +131,7 @@ public class CelApp {
         Val result = program.eval(variables2).getVal();
 
 
-        System.out.println("Result of CEL evaluation - does the entry exist?: "+ result.booleanValue());
+        System.out.println("Result of CEL evaluation - does the entry exist?: " + result.booleanValue());
 
 /*
         // Compile CEL Program.
@@ -121,6 +189,26 @@ public class CelApp {
     }
     */
     }
+
+    public static Env prepareEnv() {
+        Descriptors.Descriptor accountDescriptor = Account.getDescriptor();
+        List<Decl> declsList = new ArrayList<>();
+
+        declsList.add(Decls.newVar(accountDescriptor.findFieldByName("user_id").getName(), Decls.String));
+        declsList.add(Decls.newVar(accountDescriptor.findFieldByName("display_name").getName(), Decls.String));
+        declsList.add(Decls.newVar(accountDescriptor.findFieldByName("phone_number").getName(), Decls.String));
+        declsList.add(Decls.newVar(accountDescriptor.findFieldByName("emails").getName(), Decls.newListType(Decls.String)));
+
+        ProtoTypeRegistry celTypeRegistry = ProtoTypeRegistry.newRegistry();
+        celTypeRegistry.registerMessage(Account.getDefaultInstance());
+        return Env.newEnv(
+                EnvOption.container(accountDescriptor.getFullName()),
+                EnvOption.customTypeProvider(celTypeRegistry),
+                EnvOption.customTypeAdapter(celTypeRegistry),
+                EnvOption.declarations(declsList));
+
+    }
+
     public static void simpleCel() throws ScriptException {
         // Build the script factory
         ScriptHost scriptHost = ScriptHost.newBuilder().build();
